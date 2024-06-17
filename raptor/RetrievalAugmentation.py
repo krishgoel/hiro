@@ -29,6 +29,8 @@ class RetrievalAugmentationConfig:
         tr_tokenizer=None,
         tr_threshold=0.5,
         tr_top_k=5,
+        tr_hiro_selection_threshold=0.3,
+        tr_hiro_delta_threshold=0.015,
         tr_selection_mode="top_k",
         tr_context_embedding_model="OpenAI",
         tr_embedding_model=None,
@@ -115,6 +117,8 @@ class RetrievalAugmentationConfig:
                 tokenizer=tr_tokenizer,
                 threshold=tr_threshold,
                 top_k=tr_top_k,
+                hiro_selection_threshold=tr_hiro_selection_threshold,
+                hiro_delta_threshold=tr_hiro_delta_threshold,
                 selection_mode=tr_selection_mode,
                 context_embedding_model=tr_context_embedding_model,
                 embedding_model=tr_embedding_model,
@@ -267,9 +271,9 @@ class RetrievalAugmentation:
         start_layer: int = None,
         num_layers: int = None,
         max_tokens: int = 3500,
-        collapse_tree: bool = True,
+        collapse_tree: bool = False,
         return_layer_information: bool = False,
-    ):
+    ) -> tuple[str, str, str] | tuple[str, str]:
         """
         Retrieves information and answers a question using the TreeRetriever instance.
 
@@ -281,11 +285,15 @@ class RetrievalAugmentation:
             use_all_information (bool): Whether to retrieve information from all nodes. Defaults to False.
 
         Returns:
-            str: The answer to the question.
+            answer (str): The answer to the question.
+            layer_information (str): The information retrieved from the tree. Returned only if return_layer_information is True.
+            context (str): The context from which the answer can be found.
+
 
         Raises:
             ValueError: If the TreeRetriever instance has not been initialized.
         """
+        
         # if return_layer_information:
         context, layer_information = self.retrieve(
             question, start_layer, num_layers, top_k, max_tokens, collapse_tree, True
@@ -294,9 +302,9 @@ class RetrievalAugmentation:
         answer = self.qa_model.answer_question(context, question)
 
         if return_layer_information:
-            return answer, layer_information
+            return answer, layer_information, context
 
-        return answer
+        return answer, context
 
     def save(self, path):
         if self.tree is None:

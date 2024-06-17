@@ -22,6 +22,8 @@ class TreeRetrieverConfig:
         tokenizer=None,
         threshold=None,
         top_k=None,
+        hiro_selection_threshold=None,
+        hiro_delta_threshold=None,
         selection_mode=None,
         context_embedding_model=None,
         embedding_model=None,
@@ -44,14 +46,27 @@ class TreeRetrieverConfig:
             raise ValueError("top_k must be an integer and at least 1")
         self.top_k = top_k
 
+        if hiro_selection_threshold is None:
+            hiro_selection_threshold = 0.3
+        if not isinstance(hiro_selection_threshold, float) or not (0 <= hiro_selection_threshold <= 1):
+            raise ValueError("hiro_selection_threshold must be a float between 0 and 1")
+        self.hiro_selection_threshold = hiro_selection_threshold
+
+        if hiro_delta_threshold is None:
+            hiro_delta_threshold = 0.015
+        if not isinstance(hiro_delta_threshold, float) or not (0 <= hiro_delta_threshold <= 1):
+            raise ValueError("hiro_delta_threshold must be a float between 0 and 1")
+        self.hiro_delta_threshold = hiro_delta_threshold
+
         if selection_mode is None:
             selection_mode = "top_k"
         if not isinstance(selection_mode, str) or selection_mode not in [
             "top_k",
             "threshold",
+            "hiro",
         ]:
             raise ValueError(
-                "selection_mode must be a string and either 'top_k' or 'threshold'"
+                "selection_mode must be a string and either 'top_k', 'threshold' or 'hiro'"
             )
         self.selection_mode = selection_mode
 
@@ -85,6 +100,8 @@ class TreeRetrieverConfig:
             Tokenizer: {tokenizer}
             Threshold: {threshold}
             Top K: {top_k}
+            HIRO Selection Threshold: {hiro_selection_threshold}
+            HIRO Delta Threshold: {hiro_delta_threshold}
             Selection Mode: {selection_mode}
             Context Embedding Model: {context_embedding_model}
             Embedding Model: {embedding_model}
@@ -94,6 +111,8 @@ class TreeRetrieverConfig:
             tokenizer=self.tokenizer,
             threshold=self.threshold,
             top_k=self.top_k,
+            hiro_selection_threshold=self.hiro_selection_threshold,
+            hiro_delta_threshold=self.hiro_delta_threshold,
             selection_mode=self.selection_mode,
             context_embedding_model=self.context_embedding_model,
             embedding_model=self.embedding_model,
@@ -133,6 +152,8 @@ class TreeRetriever(BaseRetriever):
         self.tokenizer = config.tokenizer
         self.top_k = config.top_k
         self.threshold = config.threshold
+        self.hiro_selection_threshold = config.hiro_selection_threshold
+        self.hiro_delta_threshold = config.hiro_delta_threshold
         self.selection_mode = config.selection_mode
         self.embedding_model = config.embedding_model
         self.context_embedding_model = config.context_embedding_model
@@ -215,38 +236,69 @@ class TreeRetriever(BaseRetriever):
 
         node_list = current_nodes
 
-        for layer in range(num_layers):
+        if self.selection_mode == "hiro":
+            def evaluate_children(query_embedding, parent_node, parent_distance_from_embedding):
+                local_context = set()
+
+                children = [self.tree.all_nodes[child] for child in parent_node.children]
+                if len(children) == 0:
+                    return list(local_context)
+
+                children_embeddings = get_embeddings(children, self.context_embedding_model)
+                children_distances = distances_from_embeddings(query_embedding, children_embeddings)
+
+                for child, distance in zip(children, children_distances):
+                    if ((distance - parent_distance_from_embedding) > self.hiro_delta_threshold) and (distance > self.hiro_selection_threshold):
+                        local_context.update(evaluate_children(query_embedding, child, distance))
+                    else:
+                        local_context.add(parent_node)
+
+                return list(local_context)
 
             embeddings = get_embeddings(node_list, self.context_embedding_model)
 
             distances = distances_from_embeddings(query_embedding, embeddings)
 
-            indices = indices_of_nearest_neighbors_from_distances(distances)
+            nodes_to_evaluate = [(node, distance) for node, distance in zip(node_list, distances) if distance > self.hiro_selection_threshold]
 
-            if self.selection_mode == "threshold":
-                best_indices = [
-                    index for index in indices if distances[index] > self.threshold
-                ]
+            for (parent_node, parent_distance) in nodes_to_evaluate:
+                context_nodes_to_add = evaluate_children(query_embedding, parent_node, parent_distance)
+                selected_nodes.extend(context_nodes_to_add)
+  
+        else:
 
-            elif self.selection_mode == "top_k":
-                best_indices = indices[: self.top_k]
+            for layer in range(num_layers):
 
-            nodes_to_add = [node_list[idx] for idx in best_indices]
+                embeddings = get_embeddings(node_list, self.context_embedding_model)
 
-            selected_nodes.extend(nodes_to_add)
+                distances = distances_from_embeddings(query_embedding, embeddings)
 
-            if layer != num_layers - 1:
+                indices = indices_of_nearest_neighbors_from_distances(distances)
 
-                child_nodes = []
+                if self.selection_mode == "threshold":
+                    best_indices = [
+                        index for index in indices if distances[index] > self.threshold
+                    ]
 
-                for index in best_indices:
-                    child_nodes.extend(node_list[index].children)
+                elif self.selection_mode == "top_k":
+                    best_indices = indices[: self.top_k]
 
-                # take the unique values
-                child_nodes = list(dict.fromkeys(child_nodes))
-                node_list = [self.tree.all_nodes[i] for i in child_nodes]
+                nodes_to_add = [node_list[idx] for idx in best_indices]
 
-        context = get_text(selected_nodes)
+                selected_nodes.extend(nodes_to_add)
+
+                if layer != num_layers - 1:
+
+                    child_nodes = []
+
+                    for index in best_indices:
+                        child_nodes.extend(node_list[index].children)
+
+                    # take the unique values
+                    child_nodes = list(dict.fromkeys(child_nodes))
+                    node_list = [self.tree.all_nodes[i] for i in child_nodes]
+        
+        context = get_text(set(selected_nodes))
         return selected_nodes, context
 
     def retrieve(

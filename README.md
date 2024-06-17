@@ -1,204 +1,65 @@
-<!-- <p align="center">
-  <img align="center" src="raptor.jpg" width="1000px" />
-</p>
-<p align="left"> -->
+# HIRO: Hierarchical Information Retrieval Optimization
+> A Querying Mechanism Coupled with [RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval](https://arxiv.org/abs/2401.18059)
 
-<!-- <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="raptor.jpg" width="1000px">
-  <source media="(prefers-color-scheme: light)" srcset="raptor_dark.png" width="1000px">
-  
-</picture> -->
+**HIRO** introduces a novel querying approach that optimizes information retrieval in Retrieval-Augmented Generation (RAG) systems using hierarchical structures, employing recursive similarity scoring and branch pruning to refine the context delivered to language models, enhancing both accuracy and efficiency.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="raptor_dark.png">
-  <img alt="Shows an illustrated sun in light color mode and a moon with stars in dark color mode." src="raptor.jpg">
-</picture>
+Link to the original paper: [HIRO: Hierarchical Information Retrieval Optimization](https://arxiv.org/abs/2406.09979)
 
-## RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval
-
-**RAPTOR** introduces a novel approach to retrieval-augmented language models by constructing a recursive tree structure from documents. This allows for more efficient and context-aware information retrieval across large texts, addressing common limitations in traditional language models. 
-
-
-
-For detailed methodologies and implementations, refer to the original paper:
-
-- [RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval](https://arxiv.org/abs/2401.18059)
-
-[![Paper page](https://huggingface.co/datasets/huggingface/badges/resolve/main/paper-page-sm.svg)](https://huggingface.co/papers/2401.18059)
-[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/raptor-recursive-abstractive-processing-for/question-answering-on-quality)](https://paperswithcode.com/sota/question-answering-on-quality?p=raptor-recursive-abstractive-processing-for)
-
-## Installation
-
-Before using RAPTOR, ensure Python 3.8+ is installed. Clone the RAPTOR repository and install necessary dependencies:
+## Installation Guide
+To use HIRO coupled with RAPTOR, clone the HIRO Repository and install the required dependencies (ensure Python 3.8+ is installed):
 
 ```bash
-git clone https://github.com/parthsarthi03/raptor.git
-cd raptor
+git clone https://github.com/KrishGoel/hiro.git
+cd hiro
 pip install -r requirements.txt
 ```
 
-## Basic Usage
+## HIRO Querying in Action
 
-To get started with RAPTOR, follow these steps:
+To get started with HIRO Querying, follow these steps:
 
-### Setting Up RAPTOR
+### Setting Up RAPTOR with HIRO
 
-First, set your OpenAI API key and initialize the RAPTOR configuration:
+Set your OpenAI Key and initialize RAPTOR with the HIRO configuration, adjust the `tr_hiro_selection_threshold` and `tr_hiro_delta_threshold` parameters to optimize the retrieval process (we recommend using Bayesian Optimization for hyperparameter tuning for large scale applications):
 
 ```python
 import os
 os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
 
-from raptor import RetrievalAugmentation
+from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
 
-# Initialize with default configuration. For advanced configurations, check the documentation. [WIP]
-RA = RetrievalAugmentation()
+hiro_config = RetrievalAugmentationConfig(
+    tr_selection_mode="hiro",
+    tr_hiro_selection_threshold=0.6,
+    tr_hiro_delta_threshold=0.08
+)
+
+RA = RetrievalAugmentation(config=hiro_config)
 ```
 
-### Adding Documents to the Tree
-
-Add your text documents to RAPTOR for indexing:
+### Basic Usage
 
 ```python
-with open('sample.txt', 'r') as file:
+# Adding text documents
+with open('text_file.txt', 'r') as file:
     text = file.read()
 RA.add_documents(text)
-```
 
-### Answering Questions
+# Saving a tree
+SAVE_PATH = "demo/douglas_adams"
+RA.save(SAVE_PATH)
 
-You can now use RAPTOR to answer questions based on the indexed documents:
+# Loading a saved tree
+RA = RetrievalAugmentation(tree=SAVE_PATH)
 
-```python
-question = "How did Cinderella reach her happy ending?"
+# Question-Answering
+question = "What is the answer to life, the universe, and everything else?"
 answer = RA.answer_question(question=question)
 print("Answer: ", answer)
 ```
 
-### Saving and Loading the Tree
-
-Save the constructed tree to a specified path:
-
-```python
-SAVE_PATH = "demo/cinderella"
-RA.save(SAVE_PATH)
-```
-
-Load the saved tree back into RAPTOR:
-
-```python
-RA = RetrievalAugmentation(tree=SAVE_PATH)
-answer = RA.answer_question(question=question)
-```
-
-
-### Extending RAPTOR with other Models
-
-RAPTOR is designed to be flexible and allows you to integrate any models for summarization, question-answering (QA), and embedding generation. Here is how to extend RAPTOR with your own models:
-
-#### Custom Summarization Model
-
-If you wish to use a different language model for summarization, you can do so by extending the `BaseSummarizationModel` class. Implement the `summarize` method to integrate your custom summarization logic:
-
-```python
-from raptor import BaseSummarizationModel
-
-class CustomSummarizationModel(BaseSummarizationModel):
-    def __init__(self):
-        # Initialize your model here
-        pass
-
-    def summarize(self, context, max_tokens=150):
-        # Implement your summarization logic here
-        # Return the summary as a string
-        summary = "Your summary here"
-        return summary
-```
-
-#### Custom QA Model
-
-For custom QA models, extend the `BaseQAModel` class and implement the `answer_question` method. This method should return the best answer found by your model given a context and a question:
-
-```python
-from raptor import BaseQAModel
-
-class CustomQAModel(BaseQAModel):
-    def __init__(self):
-        # Initialize your model here
-        pass
-
-    def answer_question(self, context, question):
-        # Implement your QA logic here
-        # Return the answer as a string
-        answer = "Your answer here"
-        return answer
-```
-
-#### Custom Embedding Model
-
-To use a different embedding model, extend the `BaseEmbeddingModel` class. Implement the `create_embedding` method, which should return a vector representation of the input text:
-
-```python
-from raptor import BaseEmbeddingModel
-
-class CustomEmbeddingModel(BaseEmbeddingModel):
-    def __init__(self):
-        # Initialize your model here
-        pass
-
-    def create_embedding(self, text):
-        # Implement your embedding logic here
-        # Return the embedding as a numpy array or a list of floats
-        embedding = [0.0] * embedding_dim  # Replace with actual embedding logic
-        return embedding
-```
-
-#### Integrating Custom Models with RAPTOR
-
-After implementing your custom models, integrate them with RAPTOR as follows:
-
-```python
-from raptor import RetrievalAugmentation, RetrievalAugmentationConfig
-
-# Initialize your custom models
-custom_summarizer = CustomSummarizationModel()
-custom_qa = CustomQAModel()
-custom_embedding = CustomEmbeddingModel()
-
-# Create a config with your custom models
-custom_config = RetrievalAugmentationConfig(
-    summarization_model=custom_summarizer,
-    qa_model=custom_qa,
-    embedding_model=custom_embedding
-)
-
-# Initialize RAPTOR with your custom config
-RA = RetrievalAugmentation(config=custom_config)
-```
-
-Check out `demo.ipynb` for examples on how to specify your own summarization/QA models, such as Llama/Mistral/Gemma, and Embedding Models such as SBERT, for use with RAPTOR.
-
-Note: More examples and ways to configure RAPTOR are forthcoming. Advanced usage and additional features will be provided in the documentation and repository updates.
-
-## Contributing
-
-RAPTOR is an open-source project, and contributions are welcome. Whether you're fixing bugs, adding new features, or improving documentation, your help is appreciated.
+For information on extending RAPTOR with custom models and advanced usage, refer to the [original RAPTOR Documentation](https://github.com/parthsarthi03/raptor/blob/master/README.md).
 
 ## License
 
-RAPTOR is released under the MIT License. See the LICENSE file in the repository for full details.
-
-## Citation
-
-If RAPTOR assists in your research, please cite it as follows:
-
-```bibtex
-@inproceedings{sarthi2024raptor,
-    title={RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval},
-    author={Sarthi, Parth and Abdullah, Salman and Tuli, Aditi and Khanna, Shubh and Goldie, Anna and Manning, Christopher D.},
-    booktitle={International Conference on Learning Representations (ICLR)},
-    year={2024}
-}
-```
-
-Stay tuned for more examples, configuration guides, and updates.
+HIRO is released under the [MIT License](./LICENSE.txt).
