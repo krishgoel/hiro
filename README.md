@@ -5,6 +5,8 @@
 
 Link to the original paper: [HIRO: Hierarchical Information Retrieval Optimization](https://arxiv.org/abs/2406.09979)
 
+![HIRO Querying Illustrated](hiro.png)
+
 ## Installation Guide
 To use HIRO coupled with RAPTOR, clone the HIRO Repository and install the required dependencies (ensure Python 3.8+ is installed):
 
